@@ -1,4 +1,3 @@
-from ctypes.util import test
 from functions.write_file import write_file
 
 def tests():
