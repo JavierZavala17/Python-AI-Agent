@@ -1,11 +1,13 @@
 import argparse
 import os
+import sys
 
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
 from call_function import available_functions, call_function
+from config import MAX_ITERS
 from prompts import system_prompt
 
 
@@ -30,8 +32,18 @@ def main():
     if args.verbose:
         print(f"User prompt: {args.user_prompt}\\n")
 
+    for _ in range(MAX_ITERS):
+        try:
+            final_response = generate_content(client, messages, args.verbose)
+            if final_response:
+                print("Final response:")
+                print(final_response)
+                return
+        except Exception as e:
+            print(f"Error in generate_content: {e}")
 
-    generate_content(client, messages, args.verbose)
+    print(f"Maximum iterations ({MAX_ITERS}) reached")
+    sys.exit(1)
 
 
 def generate_content(client, messages, verbose):
@@ -50,12 +62,16 @@ def generate_content(client, messages, verbose):
     if verbose:
         print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
         print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
+
+    if response.candidates:
+        for candidate in response.candidates:
+            if candidate.content:
+                messages.append(candidate.content)
     
     if not response.function_calls:
-        print(f"Responses:\n{response.text}")
-        return
+        return response.text
     
-    function_results = []
+    function_responses = []
     for function_call in response.function_calls:
         function_call_result = call_function(function_call, verbose=verbose)
 
@@ -68,7 +84,9 @@ def generate_content(client, messages, verbose):
 
         if verbose:
             print(f"-> {function_call_result.parts[0].function_response.response}")
-        function_results.append(function_call_result.parts[0])
+        function_responses.append(function_call_result.parts[0])
+
+    messages.append(types.Content(role="user", parts=function_responses))
         
     
 if __name__ == "__main__":
